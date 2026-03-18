@@ -495,6 +495,7 @@ document.getElementById('loginLogo').src = LOGO;
 
 const SUPABASE_URL = 'https://zxfqdhqubhgmsgsqflxn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4ZnFkaHF1YmhnbXNnc3FmbHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NjY3MzcsImV4cCI6MjA4OTQ0MjczN30.S109tjjzE-BJU5T7zHQpZQM59FJ9_9lxZ1EFNC-AS1I';
+const APP_URL = 'https://extra-cms.vercel.app';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const DB_KEYS = { widths:'extra_cms_col_widths_v1' };
@@ -1199,7 +1200,7 @@ async function saveUser(){
   const role = document.getElementById('u_role').value;
 
   if(!full_name || !email || !password){
-    alert('Plotëso emrin, emailin dhe password-in.');
+    alert('Plotëso emrin, emailin dhe fjalëkalimin.');
     return;
   }
   if(password.length < 6){
@@ -1207,7 +1208,7 @@ async function saveUser(){
     return;
   }
   if(users.some(u => normalizeText(u.email) === email)){
-    alert('Ekziston tashmë një përdorues me këtë email.');
+    alert('Ky email ekziston tashmë te përdoruesit aktivë. Nëse e ke fshirë nga Auth, prit pak dhe provo sërish ose përdor një email tjetër vetëm për test.');
     return;
   }
 
@@ -1220,35 +1221,50 @@ async function saveUser(){
     const { data: signData, error: signError } = await signupClient.auth.signUp({
       email,
       password,
-      options: { data: { full_name, role } }
+      options: {
+        data: { full_name, role },
+        emailRedirectTo: APP_URL
+      }
     });
 
-    if(signError) throw signError;
+    if(signError) {
+      const msg = String(signError.message || '').toLowerCase();
+      if(msg.includes('already registered') || msg.includes('already been registered') || msg.includes('user already registered')){
+        throw new Error('Ky email ekziston ende te Auth. Nëse e ke fshirë sapo, prit pak dhe provo sërish.');
+      }
+      throw signError;
+    }
 
     const newUserId = signData?.user?.id;
     if(!newUserId){
-      throw new Error('Përdoruesi u krijua pjesërisht, por mungon ID-ja e tij.');
+      throw new Error('Përdoruesi u krijua pjesërisht. Kontrollo emailin dhe provo sërish.');
     }
 
-    const { error: profileError } = await sb.from('profiles').insert({
-      id: newUserId,
-      full_name,
-      email,
-      role,
-      is_active: true
-    });
+    // Profili tani krijohet nga trigger-i në Supabase, jo nga frontend.
+    let foundProfile = false;
+    for(let i=0;i<12;i++){
+      const { data: profileRows, error: profileCheckError } = await sb
+        .from('profiles')
+        .select('id,email,role,is_active')
+        .eq('id', newUserId)
+        .limit(1);
 
-    if(profileError) {
-      if(String(profileError.message || '').toLowerCase().includes('duplicate') || profileError.code === '23505'){
-        throw new Error('Ky email ekziston tashmë te profilet.');
+      if(profileCheckError) throw profileCheckError;
+      if(profileRows && profileRows.length){
+        foundProfile = true;
+        break;
       }
-      throw profileError;
+      await new Promise(r=>setTimeout(r, 700));
+    }
+
+    if(!foundProfile){
+      throw new Error('Përdoruesi u krijua te Auth, por profili nuk u gjenerua automatikisht. Kontrollo SQL trigger-in në Supabase.');
     }
 
     await loadProfiles();
     initApp();
     closeUserModal();
-    alert('Përdoruesi u krijua me sukses.');
+    alert('Përdoruesi u krijua me sukses. Kontrollo emailin për verifikim.');
   } catch(err){
     console.error(err);
     alert(err?.message || 'Gabim gjatë krijimit të përdoruesit.');
