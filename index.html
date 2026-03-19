@@ -82,6 +82,11 @@ img{display:block;max-width:100%}
 .small{font-size:12px;color:var(--muted)}
 .empty{padding:18px;color:var(--muted);text-align:center}
 .panel.card{padding:18px}
+
+#teamView{display:flex;flex-direction:column;overflow:hidden}
+#teamView.hidden{display:none!important}
+#teamView .table-wrap{flex:1;min-height:0;overflow:auto;border:1px solid #ecf1f7;border-radius:16px;max-width:100%}
+.team-toolbar{flex:0 0 auto}
 #contactsView{display:flex;flex-direction:column;overflow:hidden}
 #contactsView.hidden{display:none!important}
 #contactsView .table-wrap{flex:1;min-height:0}
@@ -120,35 +125,52 @@ img{display:block;max-width:100%}
 .followup-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
 @media (max-width:1200px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))} .pies{grid-template-columns:repeat(2,minmax(0,1fr))} .grid-2{grid-template-columns:1fr} .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:900px){
-  .layout{grid-template-columns:1fr;height:auto;overflow:visible}
-  .sidebar{position:static}
-  .main{overflow:visible}
-  .menu{grid-auto-flow:column;grid-auto-columns:max-content;overflow:auto;padding-bottom:4px}
-  .menu button{white-space:nowrap}
-  .brand-title{font-size:16px}
+  .app{height:100vh;overflow:hidden}
+  .topbar{padding:10px 12px;gap:10px;align-items:center;flex-wrap:wrap}
+  .logo{height:36px}
+  .brand{gap:10px;flex:1 1 auto;min-width:0}
+  .brand-title{font-size:15px;white-space:nowrap}
+  .brand-subtitle{display:none}
+  .top-actions{flex:1 1 100%;justify-content:flex-start;gap:6px;overflow:auto hidden;padding-bottom:2px}
+  .btn{padding:9px 11px;border-radius:10px;font-size:13px}
+  .layout{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:calc(100vh - 70px);overflow:hidden;padding:10px;gap:10px}
+  .sidebar{position:sticky;top:0;z-index:24;padding:10px;height:auto}
+  .side-user{display:none}
+  .main{overflow:auto;min-height:0;padding-right:0;padding-bottom:12px}
+  .menu{grid-auto-flow:column;grid-auto-columns:max-content;overflow:auto hidden;padding-bottom:2px;gap:6px}
+  .menu button{white-space:nowrap;padding:10px 12px;font-size:13px}
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .card,.panel.card,.sidebar{border-radius:16px}
 }
 @media (max-width:760px){
-  .metric-grid,.followup-mini{grid-template-columns:1fr}
+  #teamView{overflow:hidden}
+  #teamView .table-wrap{overflow:auto}
+  .team-toolbar{position:static;padding-bottom:10px;margin-bottom:10px;border-bottom:0}
 
-  .topbar{align-items:flex-start;flex-direction:column}
-  .contacts-toolbar{position:static;padding-bottom:0;border-bottom:0}
+  .metric-grid,.followup-mini,.cards,.pies,.form-grid{grid-template-columns:1fr}
+  .layout{padding:8px;gap:8px;height:calc(100vh - 66px)}
+  .topbar{padding:8px 10px;gap:8px}
+  .brand-title{font-size:14px}
+  .top-actions{margin-top:0}
+  .contacts-toolbar{position:sticky;top:0;z-index:14;padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid #eef2f7;background:#fff}
   .contacts-toolbar,.contacts-toolbar .toolbar-left,.contacts-toolbar .toolbar-right{flex-wrap:nowrap;overflow:auto hidden}
-  .contacts-toolbar #searchInput{width:220px}
-  .top-actions{width:100%;justify-content:flex-start}
-  .cards,.pies,.form-grid{grid-template-columns:1fr}
-  .logo{height:38px}
-  .brand-title{font-size:15px;white-space:normal}
-  .brand-subtitle{display:none}
-  .modal{padding:16px}
+  .contacts-toolbar #searchInput{width:190px}
+  .contacts-toolbar #statusFilter,.contacts-toolbar #ownerFilter,.contacts-toolbar #sortBy{width:150px}
+  .panel.card{padding:12px}
+  .card{padding:12px}
+  .kpi{font-size:24px}
+  .modal{padding:14px;border-radius:18px;max-height:94vh}
+  .modal-header-sticky{top:-14px}
   .custom-row{grid-template-columns:1fr}
   .table{min-width:760px}
+  .pipeline-col{min-width:245px;max-width:245px}
 }
 @media (max-width:520px){
-  .layout{padding:12px}
-  .topbar{padding:12px}
-  .card,.panel.card,.sidebar{border-radius:16px}
-  .btn{padding:10px 12px}
-  .login-card{padding:22px}
+  .btn{padding:8px 10px;font-size:12px}
+  .menu button{padding:9px 11px;font-size:12px}
+  .login-card{padding:20px;border-radius:20px}
+  .login-logo{width:min(180px,100%)}
+  .kpi{font-size:22px}
 }
 
 .pipeline-wrap{display:flex;gap:14px;overflow:auto;padding-bottom:6px}
@@ -319,9 +341,11 @@ img{display:block;max-width:100%}
       </section>
 
       <section id="teamView" class="hidden panel card">
-        <div class="label">Admin</div>
-        <div style="font-weight:800;margin:4px 0 14px">Agjentët</div>
-        <div class="table-wrap">
+        <div class="team-toolbar" style="position:sticky;top:0;z-index:16;background:#fff;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid #eef2f7">
+          <div class="label">Admin</div>
+          <div style="font-weight:800;margin:4px 0 0">Agjentët</div>
+        </div>
+        <div class="table-wrap team-table-wrap">
           <table id="teamTable" class="table">
             <thead><tr id="teamHead"></tr></thead>
             <tbody id="teamBody"></tbody>
