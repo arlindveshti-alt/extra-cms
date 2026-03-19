@@ -510,6 +510,35 @@ img{display:block;max-width:100%}
   </div>
 </div>
 
+
+<div id="deactivateUserModalWrap" class="modal-backdrop">
+  <div class="modal" style="width:min(620px,100%)">
+    <h3>Çaktivizo përdoruesin</h3>
+    <div class="small" id="deactivateUserInfo" style="margin-bottom:14px"></div>
+    <div class="form-grid">
+      <div style="grid-column:1/-1">
+        <label class="small" style="display:block;margin-bottom:6px;font-weight:700;color:var(--text)">Çfarë të bëhet me kontaktet?</label>
+        <select id="deactivateTransferMode" class="select" onchange="toggleDeactivateTransferTarget()">
+          <option value="admin">Kaloji automatikisht te administratori</option>
+          <option value="selected">Zgjidh agjent tjetër</option>
+        </select>
+      </div>
+      <div id="deactivateTransferTargetWrap" style="grid-column:1/-1" class="hidden">
+        <label class="small" style="display:block;margin-bottom:6px;font-weight:700;color:var(--text)">Agjenti i ri përgjegjës</label>
+        <select id="deactivateTransferTarget" class="select"></select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="small" style="display:block;margin-bottom:6px;font-weight:700;color:var(--text)">Konfirmim</label>
+        <div class="note">Përdoruesi do të çaktivizohet. Kontaktet dhe ndjekjet aktive do të kalohen sipas zgjedhjes tënde.</div>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeDeactivateUserModal()">Anulo</button>
+      <button class="btn danger" onclick="confirmDeactivateUser()">Çaktivizo përdoruesin</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
@@ -1030,7 +1059,7 @@ function renderTeam(){
       <td>${u.role==='admin' ? 'Administrator' : 'Agjent'}</td>
       <td>${mine.length}</td>
       <td>${mine.filter(overdue).length}</td>
-      <td>${u.id===currentUser.id ? '' : `<button class="btn danger" onclick="deactivateUser('${u.id}')">Çaktivizo</button>`}</td>
+      <td>${u.id===currentUser.id ? '' : `<button class="btn danger" onclick="openDeactivateUserModal('${u.id}')">Çaktivizo</button>`}</td>
     </tr>`;
   }).join('');
 }
@@ -1227,8 +1256,8 @@ async function saveUser(){
     alert('Plotëso emrin, emailin dhe fjalëkalimin.');
     return;
   }
-  if(password.length < 6){
-    alert('Fjalëkalimi duhet të ketë të paktën 6 karaktere.');
+  if(password.length < 10){
+    alert('Fjalëkalimi duhet të ketë të paktën 10 karaktere.');
     return;
   }
   if(users.some(u => normalizeText(u.email) === email)){
@@ -1296,13 +1325,111 @@ async function saveUser(){
     setBusy(false);
   }
 }
-async function deactivateUser(id){
-  if(!confirm('Ta çaktivizoj këtë përdorues?')) return;
-  const { error } = await sb.from('profiles').update({ is_active:false }).eq('id', id);
-  if(error){ alert('Nuk u çaktivizua.'); return; }
-  const u = users.find(x=>x.id===id);
-  if(u) u.active = false;
-  renderAll();
+function getActiveAdmins(){
+  return getUsers().filter(u => u.active !== false && u.role === 'admin');
+}
+function getTransferCandidates(excludedUserId){
+  return getUsers().filter(u => u.active !== false && u.id !== excludedUserId);
+}
+function openDeactivateUserModal(id){
+  if(!isAdmin()) return;
+  if(id === currentUser?.id){
+    alert('Nuk mund ta çaktivizosh veten.');
+    return;
+  }
+  const targetUser = users.find(x => x.id === id);
+  if(!targetUser) return;
+  const activeAdmins = getActiveAdmins();
+  if(targetUser.role === 'admin' && activeAdmins.length <= 1){
+    alert('Ky është administratori i fundit aktiv. Krijo ose aktivizo një administrator tjetër para se ta çaktivizosh.');
+    return;
+  }
+
+  deactivatingUserId = id;
+  const ownedContacts = contacts.filter(c => c.ownerId === id).length;
+  document.getElementById('deactivateUserInfo').textContent = `${targetUser.name} ka ${ownedContacts} kontakte aktive në sistem.`;
+  const modeEl = document.getElementById('deactivateTransferMode');
+  const selectEl = document.getElementById('deactivateTransferTarget');
+
+  const adminTarget = activeAdmins.find(u => u.id !== id) || activeAdmins[0] || null;
+  modeEl.value = 'admin';
+  selectEl.innerHTML = getTransferCandidates(id).map(u => `<option value="${u.id}">${escapeHtml(u.name)}${u.role==='admin' ? ' (Administrator)' : ''}</option>`).join('');
+  if(adminTarget) selectEl.value = adminTarget.id;
+  toggleDeactivateTransferTarget();
+  document.getElementById('deactivateUserModalWrap').classList.add('open');
+}
+function closeDeactivateUserModal(){
+  deactivatingUserId = null;
+  document.getElementById('deactivateUserModalWrap').classList.remove('open');
+}
+function toggleDeactivateTransferTarget(){
+  const wrap = document.getElementById('deactivateTransferTargetWrap');
+  const mode = document.getElementById('deactivateTransferMode').value;
+  wrap.classList.toggle('hidden', mode !== 'selected');
+}
+async function confirmDeactivateUser(){
+  if(!deactivatingUserId || !isAdmin()) return;
+  const targetUser = users.find(x => x.id === deactivatingUserId);
+  if(!targetUser) return;
+
+  const mode = document.getElementById('deactivateTransferMode').value;
+  let transferToId = null;
+
+  if(mode === 'selected'){
+    transferToId = document.getElementById('deactivateTransferTarget').value;
+  } else {
+    const adminTarget = getActiveAdmins().find(u => u.id !== deactivatingUserId) || currentUser;
+    transferToId = adminTarget?.id || null;
+  }
+
+  if(!transferToId){
+    alert('Zgjidh një përdorues që do t’i marrë kontaktet.');
+    return;
+  }
+  if(transferToId === deactivatingUserId){
+    alert('Nuk mund t’ia kalosh kontaktet po të njëjtit përdorues që po çaktivizohet.');
+    return;
+  }
+
+  setBusy(true);
+  try {
+    const ownedIds = contacts.filter(c => c.ownerId === deactivatingUserId).map(c => Number(c.id));
+    if(ownedIds.length){
+      const { error: contactsError } = await sb.from('contacts').update({ owner_id: transferToId }).in('id', ownedIds);
+      if(contactsError) throw contactsError;
+
+      const pendingFollowupIds = followups
+        .filter(f => ownedIds.includes(Number(f.contactId)) && f.status !== 'e_kryer')
+        .map(f => Number(f.id));
+      if(pendingFollowupIds.length){
+        const { error: followupsError } = await sb.from('followups').update({ user_id: transferToId }).in('id', pendingFollowupIds);
+        if(followupsError) throw followupsError;
+      }
+    }
+
+    const { error: deactivateError } = await sb.from('profiles').update({ is_active:false }).eq('id', deactivatingUserId);
+    if(deactivateError) throw deactivateError;
+
+    contacts = contacts.map(c => c.ownerId === deactivatingUserId ? { ...c, ownerId: transferToId } : c);
+    followups = followups.map(f => {
+      const ownsTransferredContact = contacts.some(c => c.id === f.contactId && c.ownerId === transferToId);
+      if(ownsTransferredContact && f.status !== 'e_kryer' && f.userId === deactivatingUserId){
+        return { ...f, userId: transferToId };
+      }
+      return f;
+    });
+    const u = users.find(x => x.id === deactivatingUserId);
+    if(u) u.active = false;
+
+    closeDeactivateUserModal();
+    renderAll();
+    alert('Përdoruesi u çaktivizua dhe kontaktet u transferuan me sukses.');
+  } catch(err){
+    console.error(err);
+    alert(err?.message || 'Nuk u çaktivizua përdoruesi.');
+  } finally {
+    setBusy(false);
+  }
 }
 async function markFollowupCompleted(id){
   const { data, error } = await sb.from('followups').update({ status:'e_kryer', completed:true, completed_at:new Date().toISOString() }).eq('id', Number(id)).select().single();
